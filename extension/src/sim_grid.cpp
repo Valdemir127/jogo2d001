@@ -24,6 +24,7 @@ void SimGrid::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_nome_material", "id"), &SimGrid::get_nome_material);
     ClassDB::bind_method(D_METHOD("get_cor_material",  "id"), &SimGrid::get_cor_material);
     ClassDB::bind_method(D_METHOD("executar_cenario_teste"), &SimGrid::executar_cenario_teste);
+    ClassDB::bind_method(D_METHOD("executar_cenario_teste_2"), &SimGrid::executar_cenario_teste_2);
     ClassDB::bind_method(D_METHOD("preencher_cenario_benchmark"),
                          &SimGrid::preencher_cenario_benchmark);
     ClassDB::bind_method(D_METHOD("resetar_estatisticas"), &SimGrid::resetar_estatisticas);
@@ -104,6 +105,14 @@ Color SimGrid::get_cor_material(int id) const {
 String SimGrid::executar_cenario_teste() {
     if (!m_core) return String();
     const uint64_t h = m_core->executar_cenario_teste();
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
+    return String(buf);
+}
+
+String SimGrid::executar_cenario_teste_2() {
+    if (!m_core) return String();
+    const uint64_t h = m_core->executar_cenario_teste_2();
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
     return String(buf);

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-// Núcleo da simulação em chunks de 64x64 (Fase 2 - Parte 1: armazenamento em chunks, SoA).
+// Núcleo da simulação em chunks de 64x64 (Fase 2).
 class SimCore {
 public:
     SimCore(int largura, int altura, uint32_t seed);
@@ -29,6 +29,9 @@ public:
 
     // Cenário fixo para o teste de determinismo. Reinicia o estado.
     uint64_t executar_cenario_teste();
+
+    // Cenário fixo para o teste de determinismo 2 (lago de água sobre areia com pedra).
+    uint64_t executar_cenario_teste_2();
 
     // Cenário fixo para o benchmark. Reinicia o estado.
     void preencher_cenario_benchmark();
@@ -67,7 +70,7 @@ private:
     void atualizar_flat_buffers() const;
     void set_cell(int x, int y, uint16_t mat_id, uint8_t temp_vida = 0);
 
-    // RNG xorshift one-shot por célula (seed derivada de tick + x + y).
+    // RNG sem estado derivado de seed + tick + x + y (função hash rápida).
     uint32_t rng_celula(int x, int y) const;
 
     void atualizar_celula(int x, int y);

@@ -1,0 +1,3 @@
+# Hash dourado anterior (Fase 1 / Parte 1)
+# RNG trocado de xorshift combinado por hash de inteiros (splitmix) em Parte 2.
+a2e6b9a4026a64b3

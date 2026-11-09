@@ -34,6 +34,7 @@ public:
 
     // Determinismo: reinicia o estado e roda o cenário fixo. Retorna hash hex.
     godot::String executar_cenario_teste();
+    godot::String executar_cenario_teste_2();
 
     // Benchmark: reinicia o estado com o cenário fixo.
     void preencher_cenario_benchmark();

@@ -12,7 +12,7 @@ Grid 512×288 com areia, água e pedra. Simulação em C++ via GDExtension, rend
 Como o projeto usa submódulos, o clone deve ser feito com a flag `--recurse-submodules`:
 
 ```bash
-git clone --recurse-submodules https://github.com/<seu-usuario>/jogo2d001.git
+git clone --recurse-submodules https://github.com/Valdemir127/jogo2d001
 cd jogo2d001
 ```
 
@@ -77,7 +77,6 @@ Roda o cenário fixo duas vezes no mesmo processo e compara com o golden:
 ```powershell
 .\godot --headless --path . --script res://game/scripts/teste_determinismo.gd
 ```
-*Saída esperada: `[det] hash1=a2e6b9a4026a64b3` e `[det] OK`.*
 
 ### 5.2 Teste na Build Exportada (Release)
 Para provar que as otimizações do compilador (`-O2`) não alteram a simulação, exporte o jogo e rode o teste no executável.

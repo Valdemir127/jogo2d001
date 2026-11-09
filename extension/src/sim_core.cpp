@@ -57,15 +57,14 @@ void SimCore::preencher_tudo(uint16_t mat_id) {
 }
 
 uint32_t SimCore::rng_celula(int x, int y) const {
-    uint32_t s = m_seed_base
-               ^ (m_tick * 0x9E3779B1u)
-               ^ (static_cast<uint32_t>(x) * 0x85EBCA77u)
-               ^ (static_cast<uint32_t>(y) * 0xC2B2AE3Du);
-    if (s == 0) s = 1;
-    s ^= s << 13;
-    s ^= s >> 17;
-    s ^= s << 5;
-    return s;
+    // RNG sem estado derivado de seed + tick + x + y (hash de inteiros, splitmix).
+    uint32_t z = m_seed_base
+               + m_tick * 0x9E3779B1u
+               + static_cast<uint32_t>(x) * 0x85EBCA77u
+               + static_cast<uint32_t>(y) * 0xC2B2AE3Du;
+    z = (z ^ (z >> 16)) * 0x85ebca6bU;
+    z = (z ^ (z >> 13)) * 0xc2b2ae35U;
+    return z ^ (z >> 16);
 }
 
 bool SimCore::pode_trocar(uint16_t origem, uint16_t destino) const {
@@ -259,6 +258,25 @@ uint64_t SimCore::executar_cenario_teste() {
                      3 * m_largura / 8, m_altura - 8, MAT_WATER);
     preencher_regiao(5 * m_largura / 8, m_altura / 4,
                      7 * m_largura / 8, m_altura - 8, MAT_SAND);
+
+    for (int i = 0; i < 600; ++i) step();
+    return hash_fnv1a64();
+}
+
+uint64_t SimCore::executar_cenario_teste_2() {
+    // Cenário 2: lago de água sobre areia com pedra.
+    preencher_tudo(MAT_AR);
+    m_tick = 0;
+    m_direcao_esq_para_dir = true;
+
+    // Base de pedra no fundo (bloqueador)
+    preencher_regiao(0, m_altura - 6, m_largura, m_altura, MAT_STONE);
+    // Lago de água no meio
+    preencher_regiao(m_largura / 4, m_altura / 3,
+                     3 * m_largura / 4, m_altura - 6, MAT_WATER);
+    // Camada de areia por cima da água (caindo)
+    preencher_regiao(m_largura / 6, 2,
+                     5 * m_largura / 6, m_altura / 3, MAT_SAND);
 
     for (int i = 0; i < 600; ++i) step();
     return hash_fnv1a64();

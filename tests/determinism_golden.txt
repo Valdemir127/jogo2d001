@@ -1,3 +1,2 @@
-# Hash esperado do cenário executar_cenario_teste() (600 ticks).
-# Deve ser idêntico em debug e release.
-a2e6b9a4026a64b3
+# Hash dourado da Parte 2 (RNG novo)
+5f9ad2bee3d5cf0b
