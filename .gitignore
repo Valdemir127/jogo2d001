@@ -28,3 +28,17 @@ Thumbs.db
 # Testes
 tests/*.tmp
 tests/*.actual
+
+# Wrapper local (contém caminho da instalação Steam do dev)
+godot.cmd
+
+# Godot export
+*.translation
+export_credentials.cfg
+
+# SCons (o .sconsign já está, mas por garantia)
+.sconsign.dblite
+
+# Lockfiles de outros editores
+*.swp
+*.swo

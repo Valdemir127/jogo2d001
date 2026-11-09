@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+# Build da GDExtension via godot-cpp.
+
+import os
+
+# O godot-cpp master exige api_version explícito; default aqui = 4.6.
+# (4.6 é compatível em runtime com 4.7; use 4.7 só se precisar de API nova.)
+if "api_version" not in ARGUMENTS:
+    ARGUMENTS["api_version"] = "4.6"
+
+env = SConscript("godot-cpp/SConstruct")
+
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+library = env.SharedLibrary(
+    target="../bin/jogo2d001" + env["suffix"] + env["SHLIBSUFFIX"],
+    source=sources,
+)
+
+Default(library)
