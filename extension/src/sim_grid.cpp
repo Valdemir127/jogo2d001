@@ -17,7 +17,8 @@ void SimGrid::_bind_methods() {
     ClassDB::bind_method(D_METHOD("paint", "x", "y", "raio", "material_id"),
                          &SimGrid::paint);
     ClassDB::bind_method(D_METHOD("get_ids"), &SimGrid::get_ids);
-    ClassDB::bind_method(D_METHOD("get_ids_r8"), &SimGrid::get_ids_r8);
+    ClassDB::bind_method(D_METHOD("get_ids_camara", "x0", "y0", "wid", "hei", "zoom"), &SimGrid::get_ids_camara);
+
     ClassDB::bind_method(D_METHOD("get_largura"), &SimGrid::get_largura);
     ClassDB::bind_method(D_METHOD("get_altura"),  &SimGrid::get_altura);
     ClassDB::bind_method(D_METHOD("get_total_materiais"), &SimGrid::get_total_materiais);
@@ -88,8 +89,35 @@ PackedByteArray SimGrid::get_ids_r8() const {
     return m_buf_r8;
 }
 
+PackedByteArray SimGrid::get_ids_camara(int x0, int y0, int wid, int hei, int zoom) const {
+    if (!m_core) return PackedByteArray();
+    int n = wid * hei;
+    m_buf_r16.resize(static_cast<int64_t>(n * 2));
+    uint8_t* dst = m_buf_r16.ptrw();
+    int idx = 0;
+    for (int py = 0; py < hei; ++py) {
+        for (int px = 0; px < wid; ++px) {
+            int wx = x0 + px * zoom;
+            int wy = y0 + py * zoom;
+            uint16_t v = 0;
+            if (wx >= 0 && wx < m_core->get_largura() && wy >= 0 && wy < m_core->get_altura()) {
+                v = m_core->get_mat_id(wx, wy);
+            }
+            dst[idx * 2]     = static_cast<uint8_t>(v & 0xFF);
+            dst[idx * 2 + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+            ++idx;
+        }
+    }
+    return m_buf_r16;
+}
+
+
+
+
 int SimGrid::get_largura() const { return m_core ? m_core->get_largura() : 0; }
 int SimGrid::get_altura()  const { return m_core ? m_core->get_altura()  : 0; }
+
+
 
 int SimGrid::get_total_materiais() const { return MaterialTable::instancia().total(); }
 

@@ -24,6 +24,25 @@ public:
 
     godot::PackedByteArray get_ids()    const;   // uint16 LE (2 bytes/célula)
     godot::PackedByteArray get_ids_r8() const;   // fallback R8 (1 byte/célula)
+    godot::PackedByteArray get_ids_camara(int x0, int y0, int wid, int hei, int zoom = 1) const;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     int get_largura() const;
     int get_altura()  const;

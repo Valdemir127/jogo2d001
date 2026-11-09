@@ -22,6 +22,9 @@ public:
     void step();
 
     const uint16_t* get_mat_id_data()    const;
+    uint16_t get_mat_id(int x, int y) const;
+
+
     const uint8_t*  get_temp_vida_data() const;
     const uint8_t*  get_flags_data()     const;
 
@@ -49,6 +52,8 @@ private:
     static constexpr uint8_t FLAG_MOVIDA = 0x01;
     static constexpr int CHUNK_SIZE = 64;
     static constexpr int TICKS_PARA_DORMIR = 8;
+    static constexpr int MUNDO_LARGURA = 2048;
+    static constexpr int MUNDO_ALTURA = 1152;
 
     struct Rect {
         int x0, y0, x1, y1;

@@ -261,6 +261,18 @@ const uint16_t* SimCore::get_mat_id_data() const {
     return m_flat_mat_id.data();
 }
 
+uint16_t SimCore::get_mat_id(int x, int y) const {
+    if (!dentro(x, y)) return 0;
+    int cx = x / CHUNK_SIZE;
+    int cy = y / CHUNK_SIZE;
+    int lx = x % CHUNK_SIZE;
+    int ly = y % CHUNK_SIZE;
+    const Chunk& chunk = m_chunks[cy * m_chunks_x + cx];
+    return chunk.mat_id[ly * CHUNK_SIZE + lx];
+}
+
+
+
 const uint8_t* SimCore::get_temp_vida_data() const {
     atualizar_flat_buffers();
     return m_flat_temp_vida.data();
