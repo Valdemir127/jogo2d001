@@ -6,25 +6,35 @@
 
 SimCore::SimCore(int largura, int altura, uint32_t seed)
     : m_largura(largura), m_altura(altura), m_seed_base(seed) {
-    const size_t n = static_cast<size_t>(largura) * static_cast<size_t>(altura);
-    m_mat_id.resize(n, MAT_AR);
-    m_temp_vida.resize(n, 0);
-    m_flags.resize(n, 0);
+    m_chunks_x = (largura + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    m_chunks_y = (altura + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    m_chunks.resize(static_cast<size_t>(m_chunks_x) * static_cast<size_t>(m_chunks_y));
 }
 
-void SimCore::paint(int cx, int cy, int raio, uint16_t mat_id) {
+void SimCore::set_cell(int x, int y, uint16_t mat_id, uint8_t temp_vida) {
+    if (!dentro(x, y)) return;
+    int cx = x / CHUNK_SIZE;
+    int cy = y / CHUNK_SIZE;
+    int lx = x % CHUNK_SIZE;
+    int ly = y % CHUNK_SIZE;
+    Chunk& chunk = m_chunks[cy * m_chunks_x + cx];
+    int idx_c = ly * CHUNK_SIZE + lx;
+    chunk.mat_id[idx_c] = mat_id;
+    chunk.temp_vida[idx_c] = temp_vida;
+    chunk.flags[idx_c] = 0;
+}
+
+void SimCore::paint(int cx_center, int cy_center, int raio, uint16_t mat_id) {
     if (mat_id >= MaterialTable::instancia().total()) return;
     const int r2 = raio * raio;
-    for (int y = cy - raio; y <= cy + raio; ++y) {
+    for (int y = cy_center - raio; y <= cy_center + raio; ++y) {
         if (y < 0 || y >= m_altura) continue;
-        for (int x = cx - raio; x <= cx + raio; ++x) {
+        for (int x = cx_center - raio; x <= cx_center + raio; ++x) {
             if (x < 0 || x >= m_largura) continue;
-            const int dx = x - cx;
-            const int dy = y - cy;
+            const int dx = x - cx_center;
+            const int dy = y - cy_center;
             if (dx * dx + dy * dy <= r2) {
-                const int i = idx(x, y);
-                m_mat_id[i] = mat_id;
-                m_temp_vida[i] = 0;
+                set_cell(x, y, mat_id, 0);
             }
         }
     }
@@ -33,21 +43,20 @@ void SimCore::paint(int cx, int cy, int raio, uint16_t mat_id) {
 void SimCore::preencher_regiao(int x0, int y0, int x1, int y1, uint16_t mat_id) {
     for (int y = std::max(0, y0); y < std::min(m_altura, y1); ++y) {
         for (int x = std::max(0, x0); x < std::min(m_largura, x1); ++x) {
-            const int i = idx(x, y);
-            m_mat_id[i] = mat_id;
-            m_temp_vida[i] = 0;
+            set_cell(x, y, mat_id, 0);
         }
     }
 }
 
 void SimCore::preencher_tudo(uint16_t mat_id) {
-    std::fill(m_mat_id.begin(), m_mat_id.end(), mat_id);
-    std::fill(m_temp_vida.begin(), m_temp_vida.end(), 0);
-    std::fill(m_flags.begin(), m_flags.end(), 0);
+    for (auto& chunk : m_chunks) {
+        std::fill(chunk.mat_id.begin(), chunk.mat_id.end(), mat_id);
+        std::fill(chunk.temp_vida.begin(), chunk.temp_vida.end(), 0);
+        std::fill(chunk.flags.begin(), chunk.flags.end(), 0);
+    }
 }
 
 uint32_t SimCore::rng_celula(int x, int y) const {
-    // xorshift one-shot com seed determinística derivada de tick + posição.
     uint32_t s = m_seed_base
                ^ (m_tick * 0x9E3779B1u)
                ^ (static_cast<uint32_t>(x) * 0x85EBCA77u)
@@ -75,19 +84,33 @@ bool SimCore::tentar_mover(int x, int y, int dx, int dy) {
     const int ny = y + dy;
     if (!dentro(nx, ny)) return false;
 
-    const int i = idx(x, y);
-    const int j = idx(nx, ny);
+    const int cx = x / CHUNK_SIZE;
+    const int cy = y / CHUNK_SIZE;
+    const int lx = x % CHUNK_SIZE;
+    const int ly = y % CHUNK_SIZE;
+    const int src_chunk_idx = cy * m_chunks_x + cx;
+    const int src_cell_idx = ly * CHUNK_SIZE + lx;
 
-    if (m_flags[j] & FLAG_MOVIDA) return false;
+    const int ncx = nx / CHUNK_SIZE;
+    const int ncy = ny / CHUNK_SIZE;
+    const int nlx = nx % CHUNK_SIZE;
+    const int nly = ny % CHUNK_SIZE;
+    const int dst_chunk_idx = ncy * m_chunks_x + ncx;
+    const int dst_cell_idx = nly * CHUNK_SIZE + nlx;
 
-    const uint16_t origem  = m_mat_id[i];
-    const uint16_t destino = m_mat_id[j];
+    Chunk& src_chunk = m_chunks[src_chunk_idx];
+    Chunk& dst_chunk = m_chunks[dst_chunk_idx];
+
+    if (dst_chunk.flags[dst_cell_idx] & FLAG_MOVIDA) return false;
+
+    const uint16_t origem  = src_chunk.mat_id[src_cell_idx];
+    const uint16_t destino = dst_chunk.mat_id[dst_cell_idx];
     if (!pode_trocar(origem, destino)) return false;
 
-    std::swap(m_mat_id[i], m_mat_id[j]);
-    std::swap(m_temp_vida[i], m_temp_vida[j]);
-    m_flags[i] |= FLAG_MOVIDA;
-    m_flags[j] |= FLAG_MOVIDA;
+    std::swap(src_chunk.mat_id[src_cell_idx], dst_chunk.mat_id[dst_cell_idx]);
+    std::swap(src_chunk.temp_vida[src_cell_idx], dst_chunk.temp_vida[dst_cell_idx]);
+    src_chunk.flags[src_cell_idx] |= FLAG_MOVIDA;
+    dst_chunk.flags[dst_cell_idx] |= FLAG_MOVIDA;
     return true;
 }
 
@@ -110,10 +133,17 @@ void SimCore::atualizar_liquid(int x, int y) {
 }
 
 void SimCore::atualizar_celula(int x, int y) {
-    const int i = idx(x, y);
-    if (m_flags[i] & FLAG_MOVIDA) return;
+    const int cx = x / CHUNK_SIZE;
+    const int cy = y / CHUNK_SIZE;
+    const int lx = x % CHUNK_SIZE;
+    const int ly = y % CHUNK_SIZE;
+    const int chunk_idx = cy * m_chunks_x + cx;
+    const int cell_idx = ly * CHUNK_SIZE + lx;
 
-    const uint16_t mat = m_mat_id[i];
+    const Chunk& chunk = m_chunks[chunk_idx];
+    if (chunk.flags[cell_idx] & FLAG_MOVIDA) return;
+
+    const uint16_t mat = chunk.mat_id[cell_idx];
     if (mat == MAT_AR) return;
 
     const Material& m = MaterialTable::instancia().get(mat);
@@ -128,8 +158,6 @@ void SimCore::step() {
     ++m_tick;
     m_direcao_esq_para_dir = !m_direcao_esq_para_dir;
 
-    // Varredura de baixo para cima (empilhamento correto);
-    // direção horizontal alterna a cada tick para evitar viés.
     for (int y = m_altura - 1; y >= 0; --y) {
         if (m_direcao_esq_para_dir) {
             for (int x = 0; x < m_largura; ++x) atualizar_celula(x, y);
@@ -138,8 +166,46 @@ void SimCore::step() {
         }
     }
 
-    // Limpa flags para o próximo tick (mantém o hash limpo).
-    std::fill(m_flags.begin(), m_flags.end(), 0);
+    for (auto& chunk : m_chunks) {
+        std::fill(chunk.flags.begin(), chunk.flags.end(), 0);
+    }
+}
+
+void SimCore::atualizar_flat_buffers() const {
+    const size_t n = static_cast<size_t>(m_largura) * static_cast<size_t>(m_altura);
+    if (m_flat_mat_id.size() != n) m_flat_mat_id.resize(n);
+    if (m_flat_temp_vida.size() != n) m_flat_temp_vida.resize(n);
+    if (m_flat_flags.size() != n) m_flat_flags.resize(n);
+
+    for (int y = 0; y < m_altura; ++y) {
+        for (int x = 0; x < m_largura; ++x) {
+            const int cx = x / CHUNK_SIZE;
+            const int cy = y / CHUNK_SIZE;
+            const int lx = x % CHUNK_SIZE;
+            const int ly = y % CHUNK_SIZE;
+            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
+            const size_t idx_c = static_cast<size_t>(ly) * CHUNK_SIZE + lx;
+            const size_t idx_f = static_cast<size_t>(y) * m_largura + x;
+            m_flat_mat_id[idx_f] = chunk.mat_id[idx_c];
+            m_flat_temp_vida[idx_f] = chunk.temp_vida[idx_c];
+            m_flat_flags[idx_f] = chunk.flags[idx_c];
+        }
+    }
+}
+
+const uint16_t* SimCore::get_mat_id_data() const {
+    atualizar_flat_buffers();
+    return m_flat_mat_id.data();
+}
+
+const uint8_t* SimCore::get_temp_vida_data() const {
+    atualizar_flat_buffers();
+    return m_flat_temp_vida.data();
+}
+
+const uint8_t* SimCore::get_flags_data() const {
+    atualizar_flat_buffers();
+    return m_flat_flags.data();
 }
 
 uint64_t SimCore::hash_fnv1a64() const {
@@ -148,14 +214,38 @@ uint64_t SimCore::hash_fnv1a64() const {
     uint64_t h = basis;
     auto mix = [&](uint8_t b) { h ^= b; h *= prime; };
 
-    const size_t n = m_mat_id.size();
-    for (size_t i = 0; i < n; ++i) {
-        const uint16_t v = m_mat_id[i];
-        mix(static_cast<uint8_t>(v & 0xFF));
-        mix(static_cast<uint8_t>((v >> 8) & 0xFF));
+    for (int y = 0; y < m_altura; ++y) {
+        for (int x = 0; x < m_largura; ++x) {
+            const int cx = x / CHUNK_SIZE;
+            const int cy = y / CHUNK_SIZE;
+            const int lx = x % CHUNK_SIZE;
+            const int ly = y % CHUNK_SIZE;
+            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
+            const uint16_t v = chunk.mat_id[ly * CHUNK_SIZE + lx];
+            mix(static_cast<uint8_t>(v & 0xFF));
+            mix(static_cast<uint8_t>((v >> 8) & 0xFF));
+        }
     }
-    for (size_t i = 0; i < n; ++i) mix(m_temp_vida[i]);
-    for (size_t i = 0; i < n; ++i) mix(m_flags[i]);
+    for (int y = 0; y < m_altura; ++y) {
+        for (int x = 0; x < m_largura; ++x) {
+            const int cx = x / CHUNK_SIZE;
+            const int cy = y / CHUNK_SIZE;
+            const int lx = x % CHUNK_SIZE;
+            const int ly = y % CHUNK_SIZE;
+            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
+            mix(chunk.temp_vida[ly * CHUNK_SIZE + lx]);
+        }
+    }
+    for (int y = 0; y < m_altura; ++y) {
+        for (int x = 0; x < m_largura; ++x) {
+            const int cx = x / CHUNK_SIZE;
+            const int cy = y / CHUNK_SIZE;
+            const int lx = x % CHUNK_SIZE;
+            const int ly = y % CHUNK_SIZE;
+            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
+            mix(chunk.flags[ly * CHUNK_SIZE + lx]);
+        }
+    }
     return h;
 }
 

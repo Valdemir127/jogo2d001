@@ -3,8 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-// Núcleo da simulação de grid (Fase 1: sem chunks, single-thread).
-// Estado em SoA; nenhuma alocação dinâmica ocorre em step().
+// Núcleo da simulação em chunks de 64x64 (Fase 2 - Parte 1: armazenamento em chunks, SoA).
 class SimCore {
 public:
     SimCore(int largura, int altura, uint32_t seed);
@@ -21,9 +20,9 @@ public:
 
     void step();
 
-    const uint16_t* get_mat_id_data()    const { return m_mat_id.data(); }
-    const uint8_t*  get_temp_vida_data() const { return m_temp_vida.data(); }
-    const uint8_t*  get_flags_data()     const { return m_flags.data(); }
+    const uint16_t* get_mat_id_data()    const;
+    const uint8_t*  get_temp_vida_data() const;
+    const uint8_t*  get_flags_data()     const;
 
     // FNV-1a 64-bit sobre mat_id + temp_vida + flags.
     uint64_t hash_fnv1a64() const;
@@ -36,17 +35,37 @@ public:
 
 private:
     static constexpr uint8_t FLAG_MOVIDA = 0x01;
+    static constexpr int CHUNK_SIZE = 64;
+
+    struct Chunk {
+        alignas(64) std::vector<uint16_t> mat_id;
+        alignas(64) std::vector<uint8_t>  temp_vida;
+        alignas(64) std::vector<uint8_t>  flags;
+
+        Chunk() {
+            mat_id.resize(CHUNK_SIZE * CHUNK_SIZE, 0);
+            temp_vida.resize(CHUNK_SIZE * CHUNK_SIZE, 0);
+            flags.resize(CHUNK_SIZE * CHUNK_SIZE, 0);
+        }
+    };
 
     int m_largura;
     int m_altura;
+    int m_chunks_x;
+    int m_chunks_y;
 
-    std::vector<uint16_t> m_mat_id;
-    std::vector<uint8_t>  m_temp_vida;
-    std::vector<uint8_t>  m_flags;
+    std::vector<Chunk> m_chunks;
 
     uint32_t m_tick = 0;
     uint32_t m_seed_base;
     bool     m_direcao_esq_para_dir = true;
+
+    mutable std::vector<uint16_t> m_flat_mat_id;
+    mutable std::vector<uint8_t>  m_flat_temp_vida;
+    mutable std::vector<uint8_t>  m_flat_flags;
+
+    void atualizar_flat_buffers() const;
+    void set_cell(int x, int y, uint16_t mat_id, uint8_t temp_vida = 0);
 
     // RNG xorshift one-shot por célula (seed derivada de tick + x + y).
     uint32_t rng_celula(int x, int y) const;
@@ -57,7 +76,6 @@ private:
     bool tentar_mover(int x, int y, int dx, int dy);
     bool pode_trocar(uint16_t origem, uint16_t destino) const;
 
-    int  idx(int x, int y) const { return y * m_largura + x; }
     bool dentro(int x, int y) const {
         return x >= 0 && x < m_largura && y >= 0 && y < m_altura;
     }
