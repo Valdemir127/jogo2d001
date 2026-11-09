@@ -1,0 +1,30 @@
+# Build
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.pdb
+*.lib
+*.exp
+.sconsign.dblite
+.scons_cache/
+compile_commands.json
+
+# Godot
+.godot/
+*.import
+.import/
+
+# Editor
+.vs/
+.vscode/
+.idea/
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Testes
+tests/*.tmp
+tests/*.actual
