@@ -7,22 +7,21 @@ Grid 512×288 com areia, água e pedra. Simulação em C++ via GDExtension, rend
 - Godot **4.7.2** (renderer Forward+)
 - `godot-cpp` branch `master`, commit **`b472519c42be09c1acec3fd63acd4010fc586ad4`** (submódulo)
 
-## Clonar
+## 1. Clonar
+
+Como o projeto usa submódulos, o clone deve ser feito com a flag `--recurse-submodules`:
 
 ```bash
 git clone --recurse-submodules https://github.com/<seu-usuario>/jogo2d001.git
 cd jogo2d001
 ```
 
-Se você já clonou sem `--recurse-submodules`, rode depois:
-
+Se você já clonou sem a flag, rode depois:
 ```bash
 git submodule update --init --recursive
 ```
 
-## Build (Windows)
-
-### Pré-requisitos
+## 2. Pré-requisitos (Windows)
 
 - [MSYS2](https://www.msys2.org/) com o toolchain MinGW-w64:
   ```bash
@@ -30,8 +29,17 @@ git submodule update --init --recursive
   ```
 - Python 3.10+
 - SCons: `pip install scons`
+- **Godot 4.7.2 (Forward+)** instalado.
 
-### Compilação
+### Configurando o comando `godot` (Obrigatório para automação)
+Os scripts `.bat` deste projeto usam o comando `godot`. Se o executável do Godot não estiver no PATH do sistema, crie um arquivo `godot.cmd` na raiz do projeto com o seguinte conteúdo (ajuste o caminho do executável se necessário):
+
+```cmd
+@echo off
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" %*
+```
+
+## 3. Compilação (Build)
 
 Abra o terminal **"MSYS2 MinGW 64-bit"** (não use PowerShell/CMD) e execute, a partir da raiz do projeto:
 
@@ -42,95 +50,77 @@ scons platform=windows target=template_release api_version=4.6 use_mingw=yes -j4
 ```
 
 Os DLLs são gerados em `bin/`:
-
 - `jogo2d001.windows.template_debug.x86_64.dll`
 - `jogo2d001.windows.template_release.x86_64.dll`
 
-A primeira compilação demora (10–25 min) porque o SCons compila o `godot-cpp` inteiro (~800–1000 arquivos `.cpp`). As seguintes recompilam só `extension/src/*.cpp` (~15 s).
+*Nota: A primeira compilação demora (10–25 min) porque o SCons compila o `godot-cpp` inteiro (~800–1000 arquivos `.cpp`). As seguintes recompilam só `extension/src/*.cpp` (~15 s).*
 
-### Flags
+## 4. Execução (Editor)
 
-- **`api_version=4.6`**: o `godot-cpp` no commit fixado exige a flag explicitamente. `4.6` é compatível em runtime com o Godot 4.7; a Fase 1 não usa nenhuma API nova de 4.7.
-- **`use_mingw=yes`**: força o uso do MinGW em vez de tentar o MSVC.
-- **`-j4`**: 4 jobs paralelos. Ajuste conforme os núcleos da sua CPU.
-
-## Execução
-
-1. Abra o projeto no Godot 4.7.2 (Forward+).
+1. Abra o projeto no Godot 4.7.2.
 2. Rode a cena principal `game/cenas/teste.tscn` (F5).
 
 ### Controles
-
 - **Mouse** (segurar e arrastar): pintar
 - **`1`** pedra · **`2`** areia · **`3`** água · **`0`** apagar
 - **`+`** / **`-`**: raio do pincel
 
 ### HUD
-
 Mostra FPS, tempo médio e máximo do `step()` em ms, material atual e raio do pincel.
 
-## Determinismo
+## 5. Teste de Determinismo e Release
 
-O teste roda o cenário fixo (`executar_cenario_teste`) duas vezes no mesmo processo, compara os hashes e valida contra o valor dourado versionado em `tests/determinism_golden.txt`.
+A simulação é validada contra o hash dourado **`a2e6b9a4026a64b3`** (versionado em `tests/determinism_golden.txt`).
 
-```bash
-godot --headless --path . --script res://game/scripts/teste_determinismo.gd
+### 5.1 Teste no Editor (Desenvolvimento)
+Roda o cenário fixo duas vezes no mesmo processo e compara com o golden:
+```powershell
+.\godot --headless --path . --script res://game/scripts/teste_determinismo.gd
 ```
+*Saída esperada: `[det] hash1=a2e6b9a4026a64b3` e `[det] OK`.*
 
-Saída esperada:
+### 5.2 Teste na Build Exportada (Release)
+Para provar que as otimizações do compilador (`-O2`) não alteram a simulação, exporte o jogo e rode o teste no executável.
 
+1. **Feche o editor Godot** (isso libera as DLLs para não corromper a exportação).
+2. No PowerShell ou CMD, na raiz do projeto, rode:
+   ```cmd
+   .\build_release.bat
+   ```
+   *Esse script limpa a pasta `build/`, exporta o `.exe`, cria a subpasta `bin` e copia o `.gdextension` e a DLL de release para o local correto.*
+3. Rode o script de teste:
+   ```cmd
+   .\test_determinism.bat
+   ```
+   *Saída esperada: `[det] hash=a2e6b9a4026a64b3`*
+
+## 6. Benchmark
+Roda 600 ticks no cenário fixo, com tempo total, médio e máximo do `step()`.
+```powershell
+.\godot --headless --path . --script res://game/scripts/benchmark.gd
 ```
-[det] hash1=a2e6b9a4026a64b3
-[det] hash2=a2e6b9a4026a64b3
-[det] OK
-```
+*Saída esperada: `[benchmark] grid=512x288 ticks=600` e os tempos em ms.*
 
-- **Se o golden estiver vazio** (`<preencher com o hash obtido>`), o script imprime o hash obtido. Copie para `tests/determinism_golden.txt` e rode de novo.
-- **Se o hash divergir** do golden, algum commit anterior alterou o comportamento da simulação. Investigue antes de atualizar o golden.
+## 7. Solução de Problemas (Troubleshooting)
 
-> `godot` aqui é um atalho local. No Windows, use `.\godot` (wrapper `godot.cmd` na raiz) ou o caminho completo do executável.
+- **Erro ao exportar: "Failed to open ...template_debug.dll"**
+  O editor do Godot está aberto. Feche-o e rode o `build_release.bat` novamente.
+- **Erro "Can't open dynamic library" ao rodar o `.exe` exportado**
+  A DLL não está na subpasta correta. O `build_release.bat` já resolve isso, mas confira se o arquivo `.gdextension` está na raiz de `build/` e a DLL em `build/bin/`.
+- **O executável de release trava no modo `--headless`**
+  Se o `.gdextension` ou a DLL estiverem faltando, o Godot entra em loop infinito ao tentar carregar a cena principal sem interface. Certifique-se de que o `build_release.bat` rodou sem erros.
+- **Tela cinza ao abrir a cena no editor**
+  Certifique-se de que a DLL de debug foi compilada e está em `bin/`. O `TextureRect` precisa carregar a textura sem falhas.
 
-## Benchmark
-
-Roda 600 ticks no cenário fixo (`preencher_cenario_benchmark`), com tempo total, médio e máximo do `step()`.
-
-```bash
-godot --headless --path . --script res://game/scripts/benchmark.gd
-```
-
-Saída esperada:
-
-```
-[benchmark] grid=512x288 ticks=600
-[benchmark] total=... ms  medio=... ms  max=... ms
-[benchmark] hash final=...
-```
-
-> **Atenção**: o editor da Steam carrega a DLL `template_debug` (`-O0`). Para medir performance real, exporte o jogo em release (a DLL `template_release` é usada).
-
-## Fallback R8
-
-Se o renderer rejeitar `Image.FORMAT_R16` (não deve acontecer no Forward+), troque `USAR_R16 = true` para `false` no topo de `game/scripts/teste.gd`. Os IDs da Fase 1 são todos `< 256`, então R8 dá conta. O shader decodifica o ID com `round(raw * 255.0)` em vez de `round(raw * 65535.0)`.
-
-## Estrutura
-
+## 8. Estrutura de Pastas
 ```
 /project.godot
 /game/            cenas, GDScript, shaders
 /extension/       C++ (GDExtension) + submódulo godot-cpp
 /bin/             DLLs + .gdextension
+/build/           (gerado pelos scripts, ignorado no git)
 /maps/            PNGs de autoria (vazio na Fase 1)
 /mods/            mods embutidos (vazio na Fase 1)
 /docs/            documentação
 /tests/           golden de determinismo
 ```
-
-## Exportação e Teste de Release
-
-Para validar que a simulação é idêntica em Release e Debug, use os scripts na raiz do projeto:
-
-1. Compile a DLL de release no MSYS2.
-2. Feche o editor Godot e rode `build_release.bat`.
-3. Rode `test_determinism.bat`.
-
-O resultado esperado é o hash `a2e6b9a4026a64b3`.
