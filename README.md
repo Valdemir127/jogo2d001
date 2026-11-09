@@ -124,3 +124,13 @@ Se o renderer rejeitar `Image.FORMAT_R16` (não deve acontecer no Forward+), tro
 /docs/            documentação
 /tests/           golden de determinismo
 ```
+
+## Exportação e Teste de Release
+
+Para validar que a simulação é idêntica em Release e Debug, use os scripts na raiz do projeto:
+
+1. Compile a DLL de release no MSYS2.
+2. Feche o editor Godot e rode `build_release.bat`.
+3. Rode `test_determinism.bat`.
+
+O resultado esperado é o hash `a2e6b9a4026a64b3`.
