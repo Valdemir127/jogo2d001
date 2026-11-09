@@ -10,6 +10,7 @@
 .sconsign.dblite
 .scons_cache/
 compile_commands.json
+*.a
 
 # Godot
 .godot/
