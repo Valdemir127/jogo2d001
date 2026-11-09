@@ -43,3 +43,7 @@ export_credentials.cfg
 # Lockfiles de outros editores
 *.swp
 *.swo
+
+# Build de exportação
+build/
+*.TMP

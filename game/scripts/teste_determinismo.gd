@@ -4,6 +4,7 @@ extends SceneTree
 const GOLDEN_PATH := "res://tests/determinism_golden.txt"
 
 func _initialize() -> void:
+    print("Iniciando teste de determinismo...")
     var h1 := _rodar()
     var h2 := _rodar()
     print("[det] hash1=%s" % h1)
