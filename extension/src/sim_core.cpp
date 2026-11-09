@@ -9,6 +9,10 @@ SimCore::SimCore(int largura, int altura, uint32_t seed)
     m_chunks_x = (largura + CHUNK_SIZE - 1) / CHUNK_SIZE;
     m_chunks_y = (altura + CHUNK_SIZE - 1) / CHUNK_SIZE;
     m_chunks.resize(static_cast<size_t>(m_chunks_x) * static_cast<size_t>(m_chunks_y));
+    for (auto& chunk : m_chunks) {
+        chunk.dirty_rect.x0 = 0; chunk.dirty_rect.y0 = 0;
+        chunk.dirty_rect.x1 = CHUNK_SIZE - 1; chunk.dirty_rect.y1 = CHUNK_SIZE - 1;
+    }
 }
 
 void SimCore::set_cell(int x, int y, uint16_t mat_id, uint8_t temp_vida) {
@@ -22,6 +26,30 @@ void SimCore::set_cell(int x, int y, uint16_t mat_id, uint8_t temp_vida) {
     chunk.mat_id[idx_c] = mat_id;
     chunk.temp_vida[idx_c] = temp_vida;
     chunk.flags[idx_c] = 0;
+    marcar_dirty(x, y);
+}
+
+void SimCore::marcar_dirty(int x, int y) {
+    int cx = x / CHUNK_SIZE;
+    int cy = y / CHUNK_SIZE;
+    Chunk& chunk = m_chunks[cy * m_chunks_x + cx];
+    chunk.next_dirty_rect.add(x % CHUNK_SIZE, y % CHUNK_SIZE);
+    chunk.ativo = true;
+    chunk.ticks_parado = 0;
+
+    // Acorda vizinhos se estiver perto da borda
+    int lx = x % CHUNK_SIZE;
+    int ly = y % CHUNK_SIZE;
+    if (lx == 0 && cx > 0) acordar_chunk(cx - 1, cy);
+    if (lx == CHUNK_SIZE - 1 && cx < m_chunks_x - 1) acordar_chunk(cx + 1, cy);
+    if (ly == 0 && cy > 0) acordar_chunk(cx, cy - 1);
+    if (ly == CHUNK_SIZE - 1 && cy < m_chunks_y - 1) acordar_chunk(cx, cy + 1);
+}
+
+void SimCore::acordar_chunk(int cx, int cy) {
+    Chunk& chunk = m_chunks[cy * m_chunks_x + cx];
+    chunk.ativo = true;
+    chunk.ticks_parado = 0;
 }
 
 void SimCore::paint(int cx_center, int cy_center, int raio, uint16_t mat_id) {
@@ -53,11 +81,14 @@ void SimCore::preencher_tudo(uint16_t mat_id) {
         std::fill(chunk.mat_id.begin(), chunk.mat_id.end(), mat_id);
         std::fill(chunk.temp_vida.begin(), chunk.temp_vida.end(), 0);
         std::fill(chunk.flags.begin(), chunk.flags.end(), 0);
+        chunk.ativo = true;
+        chunk.ticks_parado = 0;
+        chunk.dirty_rect.x0 = 0; chunk.dirty_rect.y0 = 0;
+        chunk.dirty_rect.x1 = CHUNK_SIZE - 1; chunk.dirty_rect.y1 = CHUNK_SIZE - 1;
     }
 }
 
 uint32_t SimCore::rng_celula(int x, int y) const {
-    // RNG sem estado derivado de seed + tick + x + y (hash de inteiros, splitmix).
     uint32_t z = m_seed_base
                + m_tick * 0x9E3779B1u
                + static_cast<uint32_t>(x) * 0x85EBCA77u
@@ -110,6 +141,15 @@ bool SimCore::tentar_mover(int x, int y, int dx, int dy) {
     std::swap(src_chunk.temp_vida[src_cell_idx], dst_chunk.temp_vida[dst_cell_idx]);
     src_chunk.flags[src_cell_idx] |= FLAG_MOVIDA;
     dst_chunk.flags[dst_cell_idx] |= FLAG_MOVIDA;
+
+    src_chunk.next_dirty_rect.add(lx, ly);
+    dst_chunk.next_dirty_rect.add(nlx, nly);
+
+    src_chunk.ativo = true;
+    src_chunk.ticks_parado = 0;
+    dst_chunk.ativo = true;
+    dst_chunk.ticks_parado = 0;
+
     return true;
 }
 
@@ -156,16 +196,37 @@ void SimCore::atualizar_celula(int x, int y) {
 void SimCore::step() {
     ++m_tick;
     m_direcao_esq_para_dir = !m_direcao_esq_para_dir;
+    m_chunks_ativos_count = 0;
 
     for (int y = m_altura - 1; y >= 0; --y) {
         if (m_direcao_esq_para_dir) {
-            for (int x = 0; x < m_largura; ++x) atualizar_celula(x, y);
+            for (int x = 0; x < m_largura; ++x) {
+                int cx = x / CHUNK_SIZE;
+                int cy = y / CHUNK_SIZE;
+                if (m_chunk_sleep_enabled && !m_chunks[cy * m_chunks_x + cx].ativo) continue;
+                atualizar_celula(x, y);
+            }
         } else {
-            for (int x = m_largura - 1; x >= 0; --x) atualizar_celula(x, y);
+            for (int x = m_largura - 1; x >= 0; --x) {
+                int cx = x / CHUNK_SIZE;
+                int cy = y / CHUNK_SIZE;
+                if (m_chunk_sleep_enabled && !m_chunks[cy * m_chunks_x + cx].ativo) continue;
+                atualizar_celula(x, y);
+            }
         }
     }
 
     for (auto& chunk : m_chunks) {
+        if (chunk.next_dirty_rect.is_empty()) {
+            chunk.ticks_parado++;
+            if (chunk.ticks_parado >= TICKS_PARA_DORMIR) chunk.ativo = false;
+        } else {
+            chunk.ticks_parado = 0;
+            chunk.ativo = true;
+        }
+        chunk.dirty_rect = chunk.next_dirty_rect;
+        chunk.next_dirty_rect.reset();
+        if (chunk.ativo) m_chunks_ativos_count++;
         std::fill(chunk.flags.begin(), chunk.flags.end(), 0);
     }
 }
@@ -176,18 +237,21 @@ void SimCore::atualizar_flat_buffers() const {
     if (m_flat_temp_vida.size() != n) m_flat_temp_vida.resize(n);
     if (m_flat_flags.size() != n) m_flat_flags.resize(n);
 
-    for (int y = 0; y < m_altura; ++y) {
-        for (int x = 0; x < m_largura; ++x) {
-            const int cx = x / CHUNK_SIZE;
-            const int cy = y / CHUNK_SIZE;
-            const int lx = x % CHUNK_SIZE;
-            const int ly = y % CHUNK_SIZE;
+    for (int cy = 0; cy < m_chunks_y; ++cy) {
+        for (int cx = 0; cx < m_chunks_x; ++cx) {
             const auto& chunk = m_chunks[cy * m_chunks_x + cx];
-            const size_t idx_c = static_cast<size_t>(ly) * CHUNK_SIZE + lx;
-            const size_t idx_f = static_cast<size_t>(y) * m_largura + x;
-            m_flat_mat_id[idx_f] = chunk.mat_id[idx_c];
-            m_flat_temp_vida[idx_f] = chunk.temp_vida[idx_c];
-            m_flat_flags[idx_f] = chunk.flags[idx_c];
+            for (int ly = 0; ly < CHUNK_SIZE; ++ly) {
+                for (int lx = 0; lx < CHUNK_SIZE; ++lx) {
+                    int x = cx * CHUNK_SIZE + lx;
+                    int y = cy * CHUNK_SIZE + ly;
+                    if (x >= m_largura || y >= m_altura) continue;
+                    size_t idx_c = static_cast<size_t>(ly) * CHUNK_SIZE + lx;
+                    size_t idx_f = static_cast<size_t>(y) * m_largura + x;
+                    m_flat_mat_id[idx_f] = chunk.mat_id[idx_c];
+                    m_flat_temp_vida[idx_f] = chunk.temp_vida[idx_c];
+                    m_flat_flags[idx_f] = chunk.flags[idx_c];
+                }
+            }
         }
     }
 }
@@ -215,34 +279,22 @@ uint64_t SimCore::hash_fnv1a64() const {
 
     for (int y = 0; y < m_altura; ++y) {
         for (int x = 0; x < m_largura; ++x) {
-            const int cx = x / CHUNK_SIZE;
-            const int cy = y / CHUNK_SIZE;
-            const int lx = x % CHUNK_SIZE;
-            const int ly = y % CHUNK_SIZE;
-            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
-            const uint16_t v = chunk.mat_id[ly * CHUNK_SIZE + lx];
+            const auto& chunk = m_chunks[(y / CHUNK_SIZE) * m_chunks_x + (x / CHUNK_SIZE)];
+            const uint16_t v = chunk.mat_id[(y % CHUNK_SIZE) * CHUNK_SIZE + (x % CHUNK_SIZE)];
             mix(static_cast<uint8_t>(v & 0xFF));
             mix(static_cast<uint8_t>((v >> 8) & 0xFF));
         }
     }
     for (int y = 0; y < m_altura; ++y) {
         for (int x = 0; x < m_largura; ++x) {
-            const int cx = x / CHUNK_SIZE;
-            const int cy = y / CHUNK_SIZE;
-            const int lx = x % CHUNK_SIZE;
-            const int ly = y % CHUNK_SIZE;
-            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
-            mix(chunk.temp_vida[ly * CHUNK_SIZE + lx]);
+            const auto& chunk = m_chunks[(y / CHUNK_SIZE) * m_chunks_x + (x / CHUNK_SIZE)];
+            mix(chunk.temp_vida[(y % CHUNK_SIZE) * CHUNK_SIZE + (x % CHUNK_SIZE)]);
         }
     }
     for (int y = 0; y < m_altura; ++y) {
         for (int x = 0; x < m_largura; ++x) {
-            const int cx = x / CHUNK_SIZE;
-            const int cy = y / CHUNK_SIZE;
-            const int lx = x % CHUNK_SIZE;
-            const int ly = y % CHUNK_SIZE;
-            const auto& chunk = m_chunks[cy * m_chunks_x + cx];
-            mix(chunk.flags[ly * CHUNK_SIZE + lx]);
+            const auto& chunk = m_chunks[(y / CHUNK_SIZE) * m_chunks_x + (x / CHUNK_SIZE)];
+            mix(chunk.flags[(y % CHUNK_SIZE) * CHUNK_SIZE + (x % CHUNK_SIZE)]);
         }
     }
     return h;
@@ -264,17 +316,13 @@ uint64_t SimCore::executar_cenario_teste() {
 }
 
 uint64_t SimCore::executar_cenario_teste_2() {
-    // Cenário 2: lago de água sobre areia com pedra.
     preencher_tudo(MAT_AR);
     m_tick = 0;
     m_direcao_esq_para_dir = true;
 
-    // Base de pedra no fundo (bloqueador)
     preencher_regiao(0, m_altura - 6, m_largura, m_altura, MAT_STONE);
-    // Lago de água no meio
     preencher_regiao(m_largura / 4, m_altura / 3,
                      3 * m_largura / 4, m_altura - 6, MAT_WATER);
-    // Camada de areia por cima da água (caindo)
     preencher_regiao(m_largura / 6, 2,
                      5 * m_largura / 6, m_altura / 3, MAT_SAND);
 

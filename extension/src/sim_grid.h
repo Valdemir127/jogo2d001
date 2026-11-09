@@ -44,6 +44,12 @@ public:
 
     godot::String hash_atual() const;
 
+    // Debug e visualização
+    void set_chunk_sleep_enabled(bool enabled);
+    bool get_chunk_sleep_enabled() const;
+    int  get_chunks_ativos() const;
+    int  get_chunks_totais() const;
+
 protected:
     static void _bind_methods();
 

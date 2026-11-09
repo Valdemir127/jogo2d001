@@ -30,7 +30,10 @@ void SimGrid::_bind_methods() {
     ClassDB::bind_method(D_METHOD("resetar_estatisticas"), &SimGrid::resetar_estatisticas);
     ClassDB::bind_method(D_METHOD("get_step_ms_medio"),  &SimGrid::get_step_ms_medio);
     ClassDB::bind_method(D_METHOD("get_step_ms_maximo"), &SimGrid::get_step_ms_maximo);
-    ClassDB::bind_method(D_METHOD("hash_atual"), &SimGrid::hash_atual);
+    ClassDB::bind_method(D_METHOD("set_chunk_sleep_enabled", "enabled"), &SimGrid::set_chunk_sleep_enabled);
+    ClassDB::bind_method(D_METHOD("get_chunk_sleep_enabled"), &SimGrid::get_chunk_sleep_enabled);
+    ClassDB::bind_method(D_METHOD("get_chunks_ativos"), &SimGrid::get_chunks_ativos);
+    ClassDB::bind_method(D_METHOD("get_chunks_totais"), &SimGrid::get_chunks_totais);
 }
 
 void SimGrid::inicializar(int largura, int altura, uint32_t seed) {
@@ -139,4 +142,20 @@ String SimGrid::hash_atual() const {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
     return String(buf);
+}
+
+void SimGrid::set_chunk_sleep_enabled(bool enabled) {
+    if (m_core) m_core->set_chunk_sleep_enabled(enabled);
+}
+
+bool SimGrid::get_chunk_sleep_enabled() const {
+    return m_core ? m_core->is_chunk_sleep_enabled() : true;
+}
+
+int SimGrid::get_chunks_ativos() const {
+    return m_core ? m_core->get_chunks_ativos_count() : 0;
+}
+
+int SimGrid::get_chunks_totais() const {
+    return m_core ? m_core->get_chunks_totais_count() : 0;
 }
